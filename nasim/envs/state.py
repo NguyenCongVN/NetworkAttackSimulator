@@ -5,50 +5,68 @@ from nasim.envs.observation import Observation
 
 
 class State:
-    """A state in the NASim Environment.
+    """Một trạng thái trong NASim Environment.
 
-    Each row in the state tensor represents the state of a single host on the
-    network. For details on host the state a single host is represented see
-    :class:`HostVector`
+    Mỗi hàng trong tensor trạng thái đại diện cho trạng thái của một máy chủ 
+    trong mạng. Để biết chi tiết về cách biểu diễn trạng thái của một máy chủ, 
+    hãy xem :class:`HostVector`
 
     ...
 
-    Attributes
+    Thuộc tính
     ----------
     tensor : numpy.Array
-        tensor representation of the state of network
+        biểu diễn tensor của trạng thái mạng
     host_num_map : dict
-        mapping from host address to host number (this is used
-        to map host address to host row in the network tensor)
+        ánh xạ từ địa chỉ máy chủ đến số máy chủ (index) (được sử dụng
+        để ánh xạ địa chỉ máy chủ đến hàng tương ứng trong tensor mạng)
     """
 
     def __init__(self, network_tensor, host_num_map):
         """
-        Parameters
+        Thuộc tính
         ----------
-        state_tensor : np.Array
-            the tensor representation of the network state
+        tensor : numpy.Array
+            biểu diễn tensor của trạng thái mạng
         host_num_map : dict
-            mapping from host address to host number (this is used
-            to map host address to host row in the network tensor)
+            ánh xạ từ địa chỉ máy chủ đến số máy chủ (index) (được sử dụng
+            để ánh xạ địa chỉ máy chủ đến hàng tương ứng trong tensor mạng)
         """
         self.tensor = network_tensor
         self.host_num_map = host_num_map
 
     @classmethod
     def tensorize(cls, network):
-        h0 = network.hosts[(1, 0)]
-        h0_vector = HostVector.vectorize(h0, network.address_space_bounds)
+        """Chuyển đổi mạng thành tensor để biểu diễn trạng thái.
+
+        Phương thức này tạo ra một tensor chứa thông tin vector hóa của tất cả các host
+        trong mạng. Mỗi hàng của tensor tương ứng với một host, và số cột bằng với kích thước
+        vector trạng thái của host.
+
+        Args:
+            network: Đối tượng mạng chứa thông tin về các host và không gian địa chỉ
+
+        Returns:
+            Một đối tượng StateVector chứa tensor biểu diễn trạng thái và ánh xạ số host
+
+        Chi tiết:
+            - Đầu tiên, lấy host đầu tiên (1,0) để xác định kích thước vector
+            - Tạo tensor rỗng với kích thước phù hợp
+            - Điền thông tin vector hóa của từng host vào tensor
+            - Trả về đối tượng StateVector với tensor và ánh xạ số host
+        """
+        h0 = network.hosts[(1, 0)]  # Lấy host đầu tiên từ network
+        h0_vector = HostVector.vectorize(h0, network.address_space_bounds)  # Chuyển đổi host đầu tiên thành vector
         tensor = np.zeros(
-            (len(network.hosts), h0_vector.state_size),
+            (len(network.hosts), h0_vector.state_size),  # Tạo tensor với kích thước (số lượng host, kích thước vector của mỗi host)
             dtype=np.float32
         )
-        for host_addr, host in network.hosts.items():
-            host_num = network.host_num_map[host_addr]
+        for host_addr, host in network.hosts.items():  # Duyệt qua từng host trong network
+            host_num = network.host_num_map[host_addr]  # Lấy số thứ tự (index) của host từ map
             HostVector.vectorize(
-                host, network.address_space_bounds, tensor[host_num]
+                host, network.address_space_bounds, tensor[host_num]  # Chuyển đổi host thành vector và lưu vào tensor
             )
-        return cls(tensor, network.host_num_map)
+        return cls(tensor, network.host_num_map)  # Trả về đối tượng State mới với tensor và host_num_map
 
     @classmethod
     def generate_initial_state(cls, network):
@@ -98,26 +116,45 @@ class State:
         return State(new_tensor, self.host_num_map)
 
     def get_initial_observation(self, fully_obs):
-        """Get the initial observation of network.
-
+        """Lấy quan sát ban đầu của mạng.
+    
+        Parameters
+        ----------
+        fully_obs : bool
+            Chế độ quan sát của môi trường (True: quan sát đầy đủ, False: quan sát một phần)
+    
         Returns
         -------
         Observation
-            an observation object
+            Đối tượng observation chứa thông tin quan sát ban đầu
         """
+        # Tạo đối tượng Observation trống với kích thước bằng với trạng thái hiện tại
         obs = Observation(self.shape())
+        
+        # Nếu là chế độ quan sát đầy đủ (fully observable)
         if fully_obs:
+            # Điền toàn bộ thông tin từ trạng thái hiện tại vào observation
+            # Agent sẽ biết được tất cả thông tin về mạng, bao gồm các máy chưa khám phá
             obs.from_state(self)
             return obs
-
+    
+        # Nếu là chế độ quan sát một phần (partially observable)
+        # Chỉ điền thông tin của các máy chủ có thể tiếp cận (reachable)
         for host_addr, host in self.hosts:
+            # Bỏ qua các máy chủ không thể tiếp cận
             if not host.reachable:
                 continue
+            
+            # Chỉ lấy thông tin cơ bản: địa chỉ, khả năng tiếp cận, và trạng thái đã khám phá
+            # Agent chỉ biết về các máy chủ có sẵn ban đầu, thông thường chỉ là máy chủ bắt đầu
             host_obs = host.observe(address=True,
                                     reachable=True,
                                     discovered=True)
+            
+            # Lấy chỉ mục của host trong tensor và cập nhật thông tin vào observation
             host_idx = self.get_host_idx(host_addr)
             obs.update_from_host(host_idx, host_obs)
+        
         return obs
 
     def get_observation(self, action, action_result, fully_obs):

@@ -51,23 +51,25 @@ class NASimEnv(gym.Env):
     render_mode = None
     reward_range = (-float('inf'), float('inf'))
 
+    # REVIEW
     action_space = None
+    # REVIEW
     observation_space = None
     current_state = None
     last_obs = None
 
     def __init__(self,
-                 scenario,
-                 fully_obs=False,
-                 flat_actions=True,
-                 flat_obs=True,
-                 render_mode=None):
+                scenario,
+                fully_obs=False,
+                flat_actions=True,
+                flat_obs=True,
+                render_mode=None):
         """
         Parameters
         ----------
         scenario : Scenario
             Scenario object, defining the properties of the environment
-        fully_obs : bool, optional
+        REVIEW: fully_obs : bool, optional
             The observability mode of environment, if True then uses fully
             observable mode, otherwise is partially observable (default=False)
         flat_actions : bool, optional
@@ -79,33 +81,38 @@ class NASimEnv(gym.Env):
         render_mode : str, optional
             The render mode to use for the environment.
         """
-        self.name = scenario.name
-        self.scenario = scenario
-        self.fully_obs = fully_obs
-        self.flat_actions = flat_actions
-        self.flat_obs = flat_obs
-        self.render_mode = render_mode
-
-        self.network = Network(scenario)
-        self.current_state = State.generate_initial_state(self.network)
-        self._renderer = None
-        self.reset()
-
+        # Khởi tạo các thuộc tính cơ bản từ tham số đầu vào
+        self.name = scenario.name  # Tên của môi trường
+        self.scenario = scenario   # Lưu trữ đối tượng kịch bản
+        self.fully_obs = fully_obs  # Chế độ quan sát đầy đủ hoặc một phần
+        self.flat_actions = flat_actions  # Kiểu không gian hành động (phẳng hoặc tham số hóa)
+        self.flat_obs = flat_obs  # Kiểu không gian quan sát (1D hoặc 2D)
+        self.render_mode = render_mode  # Chế độ hiển thị
+    
+        # Khởi tạo mạng và trạng thái ban đầu của môi trường
+        self.network = Network(scenario)  # Tạo đối tượng mạng từ kịch bản
+        self.current_state = State.generate_initial_state(self.network)  # Tạo trạng thái khởi đầu
+        self._renderer = None  # Khởi tạo renderer là None, sẽ được tạo khi cần thiết
+        self.reset()  # Gọi hàm reset để khởi tạo lại môi trường và lấy observation đầu tiên
+    
+        # Khởi tạo không gian hành động dựa trên cấu hình
         if self.flat_actions:
-            self.action_space = FlatActionSpace(self.scenario)
+            self.action_space = FlatActionSpace(self.scenario)  # Không gian hành động phẳng (dùng số nguyên)
         else:
-            self.action_space = ParameterisedActionSpace(self.scenario)
-
+            self.action_space = ParameterisedActionSpace(self.scenario)  # Không gian hành động tham số hóa (dùng mảng tham số)
+    
+        # Khởi tạo không gian quan sát dựa trên cấu hình
         if self.flat_obs:
-            obs_shape = self.last_obs.shape_flat()
+            obs_shape = self.last_obs.shape_flat()  # Lấy kích thước của observation dạng 1D
         else:
-            obs_shape = self.last_obs.shape()
-        obs_low, obs_high = Observation.get_space_bounds(self.scenario)
+            obs_shape = self.last_obs.shape()  # Lấy kích thước của observation dạng 2D
+        obs_low, obs_high = Observation.get_space_bounds(self.scenario)  # Lấy giá trị thấp nhất và cao nhất cho observation space
         self.observation_space = spaces.Box(
-            low=obs_low, high=obs_high, shape=obs_shape
+            low=obs_low, high=obs_high, shape=obs_shape  # Tạo không gian quan sát dưới dạng Box (không gian liên tục)
         )
-
-        self.steps = 0
+    
+        # Khởi tạo biến đếm số bước đã thực hiện
+        self.steps = 0  # Đếm số bước thực hiện từ lần reset gần nhất
 
     def reset(self, *, seed=None, options=None):
         """Reset the state of the environment and returns the initial state.

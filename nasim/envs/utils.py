@@ -50,14 +50,30 @@ class AccessLevel(enum.IntEnum):
 
 
 def get_minimal_hops_to_goal(topology, sensitive_addresses):
-    """Get minimum network hops required to reach all sensitive hosts.
-
-    Starting from outside the network (i.e. can only reach exposed subnets).
-
-    Returns
-    -------
-    int
-        minimum number of network hops to reach all sensitive hosts
+    """Tính số bước nhảy tối thiểu trong mạng để đến tất cả các host nhạy cảm.
+    
+    Bắt đầu từ bên ngoài mạng (tức là chỉ có thể tiếp cận các subnet được phơi ra).
+    
+    Thuật toán hoạt động bằng cách:
+    1. Tính toán khoảng cách ngắn nhất giữa tất cả các cặp subnet sử dụng thuật toán Floyd-Warshall
+    2. Tìm đường đi ngắn nhất từ Internet đến tất cả các subnet chứa host nhạy cảm bằng cách xem xét
+       tất cả các hoán vị có thể
+    
+    Parameters
+    ----------
+    topology : list hoặc numpy.ndarray
+        Ma trận kề biểu diễn cấu trúc liên kết mạng, trong đó topology[i][j] = 1 
+        nếu subnet i kết nối với subnet j, ngược lại là 0
+    sensitive_addresses : list
+        Danh sách các địa chỉ host nhạy cảm, mỗi địa chỉ là một tuple (subnet_id, host_id)
+    
+        Số bước nhảy mạng tối thiểu để đến tất cả các host nhạy cảm
+    
+    Notes
+    -----
+    - Độ phức tạp thời gian: O(n³ + m!), với n là số lượng subnet và m là số lượng subnet chứa host nhạy cảm
+    - Phần Floyd-Warshall có độ phức tạp O(n³)
+    - Phần tính toán tất cả các hoán vị có độ phức tạp O(m!)
     """
     num_subnets = len(topology)
     max_value = np.iinfo(np.int16).max
@@ -103,19 +119,16 @@ def get_minimal_hops_to_goal(topology, sensitive_addresses):
 
 
 def min_subnet_depth(topology):
-    """Find the minumum depth of each subnet in the network graph in terms of steps
-    from an exposed subnet to each subnet
+    """Tìm độ sâu tối thiểu của mỗi subnet trong đồ thị mạng, tính bằng số bước
+    từ subnet tiếp xúc với internet đến mỗi subnet
 
-    Parameters
-    ----------
-    topology : 2D matrix
-        An adjacency matrix representing the network, with first subnet
-        representing the internet (i.e. exposed)
+    Tham số
+    topology : ma trận 2D
+        Ma trận kề đại diện cho mạng, với subnet đầu tiên
+        đại diện cho internet (tức là tiếp xúc với bên ngoài)
 
-    Returns
-    -------
-    depths : list
-        depth of each subnet ordered by subnet index in topology
+    Giá trị trả về
+        Danh sách độ sâu của mỗi subnet, được sắp xếp theo chỉ số subnet trong topology
     """
     num_subnets = len(topology)
 

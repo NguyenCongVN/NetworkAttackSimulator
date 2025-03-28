@@ -7,14 +7,34 @@ import nasim.scenarios.utils as u
 class Scenario:
 
     def __init__(self, scenario_dict, name=None, generated=False):
+        """Khởi tạo đối tượng Scenario để quản lý kịch bản mô phỏng tấn công mạng.
+        
+        Constructor này thiết lập các thuộc tính cơ bản cho kịch bản, bao gồm
+        thông tin cấu hình và bản đồ ánh xạ giữa địa chỉ máy chủ và chỉ số của chúng.
+        
+        Parameters
+        ----------
+        scenario_dict : dict
+            Từ điển chứa toàn bộ thông tin cấu hình kịch bản (topology, services, exploits,...)
+        name : str, optional
+            Tên của kịch bản (mặc định là None)
+        generated : bool, optional
+            Cờ đánh dấu kịch bản được tạo tự động hay không (mặc định là False)
+        """
+        # Lưu trữ từ điển chứa toàn bộ thông tin cấu hình kịch bản
         self.scenario_dict = scenario_dict
+        # Lưu tên kịch bản
         self.name = name
+        # Đánh dấu kịch bản được tạo tự động hay được định nghĩa sẵn
         self.generated = generated
+        
+        # Cache cho bản đồ exploit và privilege escalation
+        # Sẽ được khởi tạo khi truy cập lần đầu thông qua các property
         self._e_map = None
         self._pe_map = None
-
-        # this is used for consistent positioning of
-        # host state and obs in state and obs matrices
+    
+        # Tạo ánh xạ từ địa chỉ máy chủ (subnet, host) đến chỉ số của máy chủ đó
+        # Được sử dụng để đảm bảo vị trí nhất quán của các máy chủ trong ma trận trạng thái và quan sát
         self.host_num_map = {}
         for host_num, host_addr in enumerate(self.hosts):
             self.host_num_map[host_addr] = host_num
