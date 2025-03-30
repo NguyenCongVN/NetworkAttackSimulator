@@ -2,6 +2,7 @@ import numpy as np
 
 from nasim.envs.action import ActionResult
 from nasim.envs.utils import get_minimal_hops_to_goal, min_subnet_depth, AccessLevel
+from logger import logger
 
 # column in topology adjacency matrix that represents connection between
 # subnet and public
@@ -52,15 +53,15 @@ class Network:
         """
         # Sử dụng biến DEBUG để hiển thị thông tin debug
         if DEBUG:
-            print(f"[DEBUG] Bắt đầu perform_action với action: {action}")
+            logger.debug(f"[DEBUG] Bắt đầu perform_action với action: {action}")
         
         tgt_subnet, tgt_id = action.target
         # Kiểm tra tính hợp lệ của subnet và host ID
         # Đảm bảo subnet ID phải nằm trong phạm vi hợp lệ (0 < subnet < tổng số subnet)
         # Subnet 0 thường được dành riêng cho Internet/public network (INTERNET = 0)
         if DEBUG:
-            print(f"[DEBUG] Kiểm tra tính hợp lệ: subnet={tgt_subnet}, host_id={tgt_id}")
-            print(f"[DEBUG] Có {len(self.subnets)} subnet trong mạng")
+            logger.debug(f"[DEBUG] Kiểm tra tính hợp lệ: subnet={tgt_subnet}, host_id={tgt_id}")
+            logger.debug(f"[DEBUG] Có {len(self.subnets)} subnet trong mạng")
         assert 0 < tgt_subnet < len(self.subnets)
         
         # Đảm bảo host ID không vượt quá số lượng host tối đa được định nghĩa cho subnet đó
@@ -71,38 +72,38 @@ class Network:
         # Tạo bản sao của state hiện tại để không ảnh hưởng trực tiếp đến state gốc
         next_state = state.copy()
         if DEBUG:
-            print(f"[DEBUG] Đã tạo bản sao của state hiện tại")
+            logger.debug(f"[DEBUG] Đã tạo bản sao của state hiện tại")
 
         # Nếu hành động là noop (không làm gì), trả về state mới và kết quả thành công
         if action.is_noop():
             if DEBUG:
-                print(f"[DEBUG] Hành động noop - không làm gì")
+                logger.debug(f"[DEBUG] Hành động noop - không làm gì")
             return next_state, ActionResult(True)
 
         # Kiểm tra xem host đích có thể truy cập và đã được phát hiện chưa
         host_reachable = state.host_reachable(action.target)
         host_discovered = state.host_discovered(action.target)
         if DEBUG:
-            print(f"[DEBUG] Kiểm tra host đích: reachable={host_reachable}, discovered={host_discovered}")
+            logger.debug(f"[DEBUG] Kiểm tra host đích: reachable={host_reachable}, discovered={host_discovered}")
         
         if not host_reachable or not host_discovered:
             # Nếu host đích không thể truy cập hoặc chưa được phát hiện
             # thì hành động sẽ thất bại với lỗi kết nối
             result = ActionResult(False, 0.0, connection_error=True)
             if DEBUG:
-                print(f"[DEBUG] Lỗi kết nối: Host không thể truy cập hoặc chưa được phát hiện")
+                logger.debug(f"[DEBUG] Lỗi kết nối: Host không thể truy cập hoặc chưa được phát hiện")
             return next_state, result
 
         # Kiểm tra quyền truy cập từ xa
         has_req_permission = self.has_required_remote_permission(state, action)
         if DEBUG:
-            print(f"[DEBUG] Kiểm tra quyền truy cập từ xa: has_req_permission={has_req_permission}")
+            logger.debug(f"[DEBUG] Kiểm tra quyền truy cập từ xa: has_req_permission={has_req_permission}")
         
         if action.is_remote() and not has_req_permission:
             # Nếu hành động là từ xa và không có đủ quyền, thất bại với lỗi quyền
             result = ActionResult(False, 0.0, permission_error=True)
             if DEBUG:
-                print(f"[DEBUG] Lỗi quyền: Không có quyền thực hiện hành động từ xa")
+                logger.debug(f"[DEBUG] Lỗi quyền: Không có quyền thực hiện hành động từ xa")
             return next_state, result
 
         # Kiểm tra liệu lưu lượng mạng đến dịch vụ đích có được phép không
@@ -110,32 +111,32 @@ class Network:
         if action.is_exploit():
             traffic_permitted = self.traffic_permitted(state, action.target, action.service)
             if DEBUG:
-                print(f"[DEBUG] Kiểm tra lưu lượng mạng: permitted={traffic_permitted}, service={action.service}")
+                logger.debug(f"[DEBUG] Kiểm tra lưu lượng mạng: permitted={traffic_permitted}, service={action.service}")
         
         if action.is_exploit() and not traffic_permitted:
             # Nếu là hành động khai thác nhưng lưu lượng bị chặn, thất bại với lỗi kết nối
             result = ActionResult(False, 0.0, connection_error=True)
             if DEBUG:
-                print(f"[DEBUG] Lỗi kết nối: Lưu lượng mạng bị chặn bởi tường lửa")
+                logger.debug(f"[DEBUG] Lỗi kết nối: Lưu lượng mạng bị chặn bởi tường lửa")
             return next_state, result
 
         # Kiểm tra điều kiện leo thang đặc quyền
         host_compromised = state.host_compromised(action.target)
         if DEBUG:
-            print(f"[DEBUG] Kiểm tra host đã xâm nhập: compromised={host_compromised}")
+            logger.debug(f"[DEBUG] Kiểm tra host đã xâm nhập: compromised={host_compromised}")
         
         if action.is_privilege_escalation() and not host_compromised:
             # Không thể leo thang đặc quyền trên host chưa bị xâm nhập
             result = ActionResult(False, 0.0, connection_error=True)
             if DEBUG:
-                print(f"[DEBUG] Lỗi leo thang đặc quyền: Host chưa bị xâm nhập")
+                logger.debug(f"[DEBUG] Lỗi leo thang đặc quyền: Host chưa bị xâm nhập")
             return next_state, result
         
         if action.is_process_scan() and not host_compromised:
             # Không thể quét quy trình trên host chưa bị xâm nhập
             result = ActionResult(False, 0.0, connection_error=True)
             if DEBUG:
-                print(f"[DEBUG] Lỗi quét quy trình: Host chưa bị xâm nhập")
+                logger.debug(f"[DEBUG] Lỗi quét quy trình: Host chưa bị xâm nhập")
             return next_state, result
 
         # Xử lý tính ngẫu nhiên trong thành công của hành động
@@ -143,24 +144,24 @@ class Network:
             # Nếu host đã bị xâm nhập thì hành động khai thác luôn thành công
             # (bỏ qua yếu tố ngẫu nhiên)
             if DEBUG:
-                print(f"[DEBUG] Host đã bị xâm nhập - hành động khai thác luôn thành công")
+                logger.debug(f"[DEBUG] Host đã bị xâm nhập - hành động khai thác luôn thành công")
             pass
         elif np.random.rand() > action.prob:
             # Nếu số ngẫu nhiên lớn hơn xác suất thành công của hành động
             # thì hành động thất bại với lỗi không xác định
             if DEBUG:
-                print(f"[DEBUG] Thất bại ngẫu nhiên: rand > action.prob ({action.prob})")
+                logger.debug(f"[DEBUG] Thất bại ngẫu nhiên: rand > action.prob ({action.prob})")
             return next_state, ActionResult(False, 0.0, undefined_error=True)
 
         # Xử lý trường hợp đặc biệt: quét subnet
         if action.is_subnet_scan():
             if DEBUG:
-                print(f"[DEBUG] Thực hiện quét subnet")
+                logger.debug(f"[DEBUG] Thực hiện quét subnet")
             return self._perform_subnet_scan(next_state, action)
 
         # Thực hiện hành động trên host đích
         if DEBUG:
-            print(f"[DEBUG] Thực hiện hành động trên host đích: {action.target}")
+            logger.debug(f"[DEBUG] Thực hiện hành động trên host đích: {action.target}")
         
         t_host = state.get_host(action.target)
         next_host_state, action_obs = t_host.perform_action(action)
@@ -170,28 +171,28 @@ class Network:
         
         # Cập nhật các thông tin liên quan khác sau khi thực hiện hành động
         if DEBUG:
-            print(f"[DEBUG] Cập nhật thông tin liên quan sau khi thực hiện hành động")
+            logger.debug(f"[DEBUG] Cập nhật thông tin liên quan sau khi thực hiện hành động")
         self._update(next_state, action, action_obs)
         
         # Trả về trạng thái mới và kết quả quan sát được
         if DEBUG:
-            print(f"[DEBUG] Kết thúc perform_action: success={action_obs.success}, reward={action_obs.value}")
+            logger.debug(f"[DEBUG] Kết thúc perform_action: success={action_obs.success}, reward={action_obs.value}")
         
         return next_state, action_obs
 
     def _perform_subnet_scan(self, next_state, action):
         # In thông tin đầu vào
-        print(f"[DEBUG] Bắt đầu subnet_scan với target={action.target}, req_access={action.req_access}")
+        logger.debug(f"[DEBUG] Bắt đầu subnet_scan với target={action.target}, req_access={action.req_access}")
         
         # Kiểm tra máy chủ đã bị xâm nhập chưa
         if not next_state.host_compromised(action.target):
-            print(f"[DEBUG] Thất bại: Host {action.target} chưa bị xâm nhập")
+            logger.debug(f"[DEBUG] Thất bại: Host {action.target} chưa bị xâm nhập")
             result = ActionResult(False, 0.0, connection_error=True)
             return next_state, result
 
         # Kiểm tra quyền truy cập
         if not next_state.host_has_access(action.target, action.req_access):
-            print(f"[DEBUG] Thất bại: Host {action.target} không có đủ quyền truy cập. Yêu cầu: {action.req_access}")
+            logger.debug(f"[DEBUG] Thất bại: Host {action.target} không có đủ quyền truy cập. Yêu cầu: {action.req_access}")
             result = ActionResult(False, 0.0, permission_error=True)
             return next_state, result
 
@@ -201,8 +202,8 @@ class Network:
         discovery_reward = 0
         target_subnet = action.target[0]
         
-        print(f"[DEBUG] Subnet mục tiêu: {target_subnet}")
-        print(f"[DEBUG] Tổng số địa chỉ trong không gian địa chỉ: {len(self.address_space)}")
+        logger.debug(f"[DEBUG] Subnet mục tiêu: {target_subnet}")
+        logger.debug(f"[DEBUG] Tổng số địa chỉ trong không gian địa chỉ: {len(self.address_space)}")
 
         # Lặp qua tất cả các host trong không gian địa chỉ
         for h_addr in self.address_space:
@@ -211,7 +212,7 @@ class Network:
             
             # Kiểm tra kết nối subnet
             subnet_connected = self.subnets_connected(target_subnet, h_addr[0])
-            print(f"[DEBUG] Kiểm tra host {h_addr}: subnet_connected={subnet_connected}")
+            logger.debug(f"[DEBUG] Kiểm tra host {h_addr}: subnet_connected={subnet_connected}")
             
             if subnet_connected:
                 host = next_state.get_host(h_addr)
@@ -222,14 +223,14 @@ class Network:
                     newly_discovered[h_addr] = True
                     host.discovered = True
                     discovery_reward += host.discovery_value
-                    print(f"[DEBUG] Phát hiện mới host {h_addr}: discovery_value={host.discovery_value}")
+                    logger.debug(f"[DEBUG] Phát hiện mới host {h_addr}: discovery_value={host.discovery_value}")
                 else:
-                    print(f"[DEBUG] Host {h_addr} đã được phát hiện trước đó")
+                    logger.debug(f"[DEBUG] Host {h_addr} đã được phát hiện trước đó")
 
         # Tổng kết kết quả
-        print(f"[DEBUG] Tổng số host đã phát hiện: {sum(1 for v in discovered.values() if v)}")
-        print(f"[DEBUG] Tổng số host mới phát hiện: {sum(1 for v in newly_discovered.values() if v)}")
-        print(f"[DEBUG] Tổng điểm thưởng khám phá: {discovery_reward}")
+        logger.debug(f"[DEBUG] Tổng số host đã phát hiện: {sum(1 for v in discovered.values() if v)}")
+        logger.debug(f"[DEBUG] Tổng số host mới phát hiện: {sum(1 for v in newly_discovered.values() if v)}")
+        logger.debug(f"[DEBUG] Tổng điểm thưởng khám phá: {discovery_reward}")
 
         # Tạo kết quả và trả về
         obs = ActionResult(
@@ -238,7 +239,7 @@ class Network:
             discovered=discovered,
             newly_discovered=newly_discovered
         )
-        print(f"[DEBUG] Hoàn thành subnet_scan: success=True, reward={discovery_reward}")
+        logger.debug(f"[DEBUG] Hoàn thành subnet_scan: success=True, reward={discovery_reward}")
         
         return next_state, obs
 
@@ -333,22 +334,22 @@ class Network:
         """
         # Thêm debug hiển thị bắt đầu kiểm tra với tên hàm
         if DEBUG:
-            print(f"[DEBUG - has_required_remote_permission] Bắt đầu kiểm tra quyền truy cập từ xa: action={action}, target={action.target}")
+            logger.debug(f"[DEBUG - has_required_remote_permission] Bắt đầu kiểm tra quyền truy cập từ xa: action={action}, target={action.target}")
         
         # Nếu subnet đích là public (có kết nối Internet), luôn cho phép thực hiện
         # vì các subnet public có thể được truy cập trực tiếp từ bên ngoài
         is_public = self.subnet_public(action.target[0])
         if DEBUG:
-            print(f"[DEBUG - has_required_remote_permission] Kiểm tra subnet đích {action.target[0]} là public: {is_public}")
+            logger.debug(f"[DEBUG - has_required_remote_permission] Kiểm tra subnet đích {action.target[0]} là public: {is_public}")
         
         if is_public:
             if DEBUG:
-                print(f"[DEBUG - has_required_remote_permission] Subnet đích là public - cho phép thực hiện")
+                logger.debug(f"[DEBUG - has_required_remote_permission] Subnet đích là public - cho phép thực hiện")
             return True
     
         # Thêm debug số lượng host trong không gian địa chỉ
         if DEBUG:
-            print(f"[DEBUG - has_required_remote_permission] Tìm kiếm bàn đạp trong {len(self.address_space)} hosts")
+            logger.debug(f"[DEBUG - has_required_remote_permission] Tìm kiếm bàn đạp trong {len(self.address_space)} hosts")
         
         # Lặp qua tất cả các host trong mạng để tìm một host đã bị xâm nhập
         # có thể thực hiện hành động từ xa này
@@ -356,7 +357,7 @@ class Network:
             # Debug thông tin host đang kiểm tra
             if DEBUG:
                 host_compromised = state.host_compromised(src_addr)
-                print(f"[DEBUG - has_required_remote_permission] Kiểm tra host {src_addr} làm bàn đạp: compromised={host_compromised}")
+                logger.debug(f"[DEBUG - has_required_remote_permission] Kiểm tra host {src_addr} làm bàn đạp: compromised={host_compromised}")
             
             # Bỏ qua các host chưa bị xâm nhập vì không thể dùng làm bàn đạp tấn công
             if not state.host_compromised(src_addr):
@@ -366,7 +367,7 @@ class Network:
             if action.is_scan():
                 subnets_connected = self.subnets_connected(src_addr[0], action.target[0])
                 if DEBUG:
-                    print(f"[DEBUG - has_required_remote_permission] Kiểm tra kết nối giữa subnet {src_addr[0]} và {action.target[0]}: {subnets_connected}")
+                    logger.debug(f"[DEBUG - has_required_remote_permission] Kiểm tra kết nối giữa subnet {src_addr[0]} và {action.target[0]}: {subnets_connected}")
                 
                 if not subnets_connected:
                     continue
@@ -377,7 +378,7 @@ class Network:
                     src_addr[0], action.target[0], action.service
                 )
                 if DEBUG:
-                    print(f"[DEBUG - has_required_remote_permission] Kiểm tra lưu lượng từ subnet {src_addr[0]} đến {action.target[0]} với service {action.service}: {traffic_permitted}")
+                    logger.debug(f"[DEBUG - has_required_remote_permission] Kiểm tra lưu lượng từ subnet {src_addr[0]} đến {action.target[0]} với service {action.service}: {traffic_permitted}")
                 
                 if not traffic_permitted:
                     continue
@@ -385,16 +386,16 @@ class Network:
             # Kiểm tra quyền truy cập của host
             has_access = state.host_has_access(src_addr, action.req_access)
             if DEBUG:
-                print(f"[DEBUG - has_required_remote_permission] Kiểm tra host {src_addr} có quyền truy cập {action.req_access}: {has_access}")
+                logger.debug(f"[DEBUG - has_required_remote_permission] Kiểm tra host {src_addr} có quyền truy cập {action.req_access}: {has_access}")
                 
             if has_access:
                 if DEBUG:
-                    print(f"[DEBUG - has_required_remote_permission] Tìm thấy bàn đạp phù hợp: {src_addr}")
+                    logger.debug(f"[DEBUG - has_required_remote_permission] Tìm thấy bàn đạp phù hợp: {src_addr}")
                 return True
                     
         # Không tìm thấy host bàn đạp nào thỏa mãn điều kiện
         if DEBUG:
-            print(f"[DEBUG - has_required_remote_permission] Không tìm thấy host bàn đạp nào phù hợp - từ chối thực hiện")
+            logger.debug(f"[DEBUG - has_required_remote_permission] Không tìm thấy host bàn đạp nào phù hợp - từ chối thực hiện")
         
         # Nếu không tìm thấy host nào thỏa mãn các điều kiện trên
         return False

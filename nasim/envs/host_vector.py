@@ -8,6 +8,7 @@ import numpy as np
 
 from nasim.envs.utils import AccessLevel
 from nasim.envs.action import ActionResult
+from logger import logger
 
 
 class HostVector:
@@ -402,23 +403,23 @@ class HostVector:
         
         # In thông tin debug về hành động đang được thực hiện
         if DEBUG:
-            print(f"[DEBUG - {function_name}] Thực hiện hành động: {action.name} trên host: {self.address}")
+            logger.debug(f"[DEBUG - {function_name}] Thực hiện hành động: {action.name} trên host: {self.address}")
         
         next_state = self.copy()
         if action.is_service_scan():
             if DEBUG:
-                print(f"[DEBUG - {function_name}] Quét dịch vụ thành công, tìm thấy: {list(self.services.keys())}")
+                logger.debug(f"[DEBUG - {function_name}] Quét dịch vụ thành công, tìm thấy: {list(self.services.keys())}")
             result = ActionResult(True, 0, services=self.services)
             return next_state, result
     
         if action.is_os_scan():
             if DEBUG:
-                print(f"[DEBUG - {function_name}] Quét hệ điều hành thành công, tìm thấy: {list(self.os.keys())}")
+                logger.debug(f"[DEBUG - {function_name}] Quét hệ điều hành thành công, tìm thấy: {list(self.os.keys())}")
             return next_state, ActionResult(True, 0, os=self.os)
     
         if action.is_exploit():
             if DEBUG:
-                print(f"[DEBUG - {function_name}] Đang khai thác dịch vụ: {action.service}" + 
+                logger.debug(f"[DEBUG - {function_name}] Đang khai thác dịch vụ: {action.service}" + 
                       (f" trên OS: {action.os}" if action.os else ""))
             
             if self.is_running_service(action.service) and \
@@ -433,9 +434,9 @@ class HostVector:
                     if action.access == AccessLevel.ROOT:
                         value = self.value
                         if DEBUG:
-                            print(f"[DEBUG - {function_name}] Khai thác thành công! Đạt quyền ROOT - nhận giá trị: {value}")
+                            logger.debug(f"[DEBUG - {function_name}] Khai thác thành công! Đạt quyền ROOT - nhận giá trị: {value}")
                     elif DEBUG:
-                        print(f"[DEBUG - {function_name}] Khai thác thành công! Nâng quyền từ {self.access} lên {action.access}")
+                        logger.debug(f"[DEBUG - {function_name}] Khai thác thành công! Nâng quyền từ {self.access} lên {action.access}")
     
                 result = ActionResult(
                     True,
@@ -447,23 +448,23 @@ class HostVector:
                 return next_state, result
             elif DEBUG:
                 if not self.is_running_service(action.service):
-                    print(f"[DEBUG - {function_name}] Khai thác thất bại - dịch vụ {action.service} không chạy trên host")
+                    logger.debug(f"[DEBUG - {function_name}] Khai thác thất bại - dịch vụ {action.service} không chạy trên host")
                 elif action.os is not None and not self.is_running_os(action.os):
-                    print(f"[DEBUG - {function_name}] Khai thác thất bại - host không chạy OS {action.os}")
+                    logger.debug(f"[DEBUG - {function_name}] Khai thác thất bại - host không chạy OS {action.os}")
     
         # following actions are on host so require correct access
         if not (self.compromised and action.req_access <= self.access):
             if DEBUG:
                 if not self.compromised:
-                    print(f"[DEBUG - {function_name}] Hành động thất bại - host chưa bị xâm nhập")
+                    logger.debug(f"[DEBUG - {function_name}] Hành động thất bại - host chưa bị xâm nhập")
                 else:
-                    print(f"[DEBUG - {function_name}] Hành động thất bại - quyền không đủ (cần {action.req_access}, hiện tại: {self.access})")
+                    logger.debug(f"[DEBUG - {function_name}] Hành động thất bại - quyền không đủ (cần {action.req_access}, hiện tại: {self.access})")
             result = ActionResult(False, 0, permission_error=True)
             return next_state, result
     
         if action.is_process_scan():
             if DEBUG:
-                print(f"[DEBUG - {function_name}] Quét tiến trình thành công, tìm thấy: {list(self.processes.keys())}")
+                logger.debug(f"[DEBUG - {function_name}] Quét tiến trình thành công, tìm thấy: {list(self.processes.keys())}")
             result = ActionResult(
                 True, 0, access=self.access, processes=self.processes
             )
@@ -471,7 +472,7 @@ class HostVector:
     
         if action.is_privilege_escalation():
             if DEBUG:
-                print(f"[DEBUG - {function_name}] Đang leo thang đặc quyền" + 
+                logger.debug(f"[DEBUG - {function_name}] Đang leo thang đặc quyền" + 
                       (f" sử dụng tiến trình: {action.process}" if action.process else ""))
             
             has_proc = (
@@ -492,9 +493,9 @@ class HostVector:
                     if action.access == AccessLevel.ROOT:
                         value = self.value
                         if DEBUG:
-                            print(f"[DEBUG - {function_name}] Leo thang thành công! Đạt quyền ROOT - nhận giá trị: {value}")
+                            logger.debug(f"[DEBUG - {function_name}] Leo thang thành công! Đạt quyền ROOT - nhận giá trị: {value}")
                     elif DEBUG:
-                        print(f"[DEBUG - {function_name}] Leo thang thành công! Nâng quyền từ {self.access} lên {action.access}")
+                        logger.debug(f"[DEBUG - {function_name}] Leo thang thành công! Nâng quyền từ {self.access} lên {action.access}")
                     
                 result = ActionResult(
                     True,
@@ -506,13 +507,13 @@ class HostVector:
                 return next_state, result
             elif DEBUG:
                 if not has_proc:
-                    print(f"[DEBUG - {function_name}] Leo thang thất bại - tiến trình {action.process} không có mặt")
+                    logger.debug(f"[DEBUG - {function_name}] Leo thang thất bại - tiến trình {action.process} không có mặt")
                 elif not has_os:
-                    print(f"[DEBUG - {function_name}] Leo thang thất bại - OS không phù hợp")
+                    logger.debug(f"[DEBUG - {function_name}] Leo thang thất bại - OS không phù hợp")
     
         # action failed due to host config not meeting preconditions
         if DEBUG:
-            print(f"[DEBUG - {function_name}] Hành động thất bại - host không đáp ứng điều kiện cần thiết")
+            logger.debug(f"[DEBUG - {function_name}] Hành động thất bại - host không đáp ứng điều kiện cần thiết")
         return next_state, ActionResult(False, 0)
 
     def observe(self,
