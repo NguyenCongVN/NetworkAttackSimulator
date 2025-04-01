@@ -111,7 +111,8 @@ class HostVector:
         - Tiếp theo là địa chỉ host (one-hot encoding)
         - Sau đó là các trạng thái: compromised, reachable, discovered
         - Tiếp theo là giá trị của host, giá trị khi phát hiện và mức độ truy cập
-        - Cuối cùng là thông tin về hệ điều hành, dịch vụ và quy trình
+        - Tiếp theo là thông tin về hệ điều hành, dịch vụ và quy trình
+        - Cuối cùng là thông tin về trạng thái giám sát, dịch vụ giả mạo và mức tin cậy
         """
         # Kiểm tra xem đã khởi tạo các thông số cơ bản chưa
         if cls.address_space_bounds is None:
@@ -161,6 +162,36 @@ class HostVector:
         for proc_num, (proc_key, proc_val) in enumerate(host_procs):
             # _get_process_idx trả về vị trí trong vector cho tiến trình dựa trên proc_num
             vector[cls._get_process_idx(proc_num)] = int(proc_val)  # Chuyển boolean thành 0/1
+        
+        # Mặc định, trạng thái giám sát là False (0.0)
+        vector[cls._monitoring_idx] = getattr(host, 'monitoring', 0.0)
+        
+        # Mặc định, không có dịch vụ giả mạo nào đang chạy
+        for srv_num in range(cls.num_services):
+            vector[cls._decoy_services_start_idx + srv_num] = 0.0
+        
+        # Nếu host có thuộc tính decoy_services, điền chúng vào vector
+        if hasattr(host, 'decoy_services'):
+            for srv_name, is_active in host.decoy_services.items():
+                if srv_name in cls.service_idx_map:
+                    srv_num = cls.service_idx_map[srv_name]
+                    vector[cls._decoy_services_start_idx + srv_num] = float(bool(is_active))
+        
+        # Mặc định, mức độ tin cậy là "Nothing" (chỉ số 0)
+        for i in range(cls.num_confident_levels):
+            vector[cls._confident_start_idx + i] = 1.0 if i == 0 else 0.0  # Nothing = 1
+        
+        # Nếu host có thuộc tính confident, điền nó vào vector
+        if hasattr(host, 'confident'):
+            confident_level = host.confident
+            confidence_levels = ["Nothing", "Low", "Medium", "High"]
+            if isinstance(confident_level, str) and confident_level in confidence_levels:
+                # Reset tất cả các mức tin cậy về 0
+                for i in range(cls.num_confident_levels):
+                    vector[cls._confident_start_idx + i] = 0.0
+                # Đặt mức tin cậy được chỉ định thành 1
+                level_idx = confidence_levels.index(confident_level)
+                vector[cls._confident_start_idx + level_idx] = 1.0
         
         # Tạo và trả về đối tượng HostVector mới với vector đã điền thông tin
         return cls(vector)
@@ -325,8 +356,8 @@ class HostVector:
     @property
     def confident(self):
         """Lấy mức độ tin cậy của host dưới dạng từ điển"""
-        # Các mức tin cậy: Low, Medium, High
-        confidence_levels = ["Low", "Medium", "High"]
+        # Các mức tin cậy: Nothing, Low, Medium, High
+        confidence_levels = ["Nothing", "Low", "Medium", "High"]
         confidence = {}
         for i, level in enumerate(confidence_levels):
             confidence[level] = bool(self.vector[self._confident_start_idx + i])
@@ -338,9 +369,9 @@ class HostVector:
         Parameters
         ----------
         level : str
-            Mức độ tin cậy ("Low", "Medium", hoặc "High")
+            Mức độ tin cậy ("Nothing", "Low", "Medium", hoặc "High")
         """
-        confidence_levels = ["Low", "Medium", "High"]
+        confidence_levels = ["Nothing", "Low", "Medium", "High"]
         if level in confidence_levels:
             # Reset tất cả các mức tin cậy về 0
             for i in range(self.num_confident_levels):
@@ -590,7 +621,10 @@ class HostVector:
                 discovery_value=False,
                 services=False,
                 processes=False,
-                os=False):
+                os=False,
+                monitoring=False,
+                decoy_services=False,
+                confident=False):
         """Tạo một vector quan sát (observation) cho host với thông tin được chọn.
         
         Phương thức này tạo ra một vector quan sát chỉ chứa những thông tin được yêu cầu
@@ -619,6 +653,12 @@ class HostVector:
             Nếu True, bao gồm thông tin về các tiến trình đang chạy
         os : bool, mặc định=False
             Nếu True, bao gồm thông tin về hệ điều hành của host
+        monitoring : bool, mặc định=False
+            Nếu True, bao gồm trạng thái giám sát (đang được giám sát hay không)
+        decoy_services : bool, mặc định=False
+            Nếu True, bao gồm thông tin về các dịch vụ giả mạo đang chạy
+        confident : bool, mặc định=False
+            Nếu True, bao gồm mức độ tin cậy của host
             
         Returns
         -------
@@ -679,6 +719,22 @@ class HostVector:
             # Lấy slice của vector tương ứng với tất cả thông tin tiến trình
             idxs = self._process_idx_slice()
             obs[idxs] = self.vector[idxs]  # Sao chép toàn bộ thông tin tiến trình
+            
+        # Thêm thông tin về trạng thái giám sát nếu được yêu cầu
+        if monitoring:
+            obs[self._monitoring_idx] = self.vector[self._monitoring_idx]
+        
+        # Thêm thông tin về dịch vụ giả mạo nếu được yêu cầu
+        if decoy_services:
+            decoy_slice = slice(self._decoy_services_start_idx, 
+                                self._decoy_services_start_idx + self.num_services)
+            obs[decoy_slice] = self.vector[decoy_slice]
+        
+        # Thêm thông tin về mức độ tin cậy nếu được yêu cầu
+        if confident:
+            confident_slice = slice(self._confident_start_idx, 
+                                self._confident_start_idx + self.num_confident_levels)
+            obs[confident_slice] = self.vector[confident_slice]
         
         # Trả về vector quan sát đã được điền thông tin theo yêu cầu
         return obs
@@ -793,8 +849,8 @@ class HostVector:
         cls._decoy_services_start_idx = cls._monitoring_idx + 1  # Vị trí bắt đầu của decoy services (one-hot)
         cls._confident_start_idx = cls._decoy_services_start_idx + cls.num_services  # Vị trí bắt đầu của confident (one-hot)
         
-        # Giả sử confident có 3 mức: Low, Medium, High
-        cls.num_confident_levels = 3
+        # Giả sử confident có 4 mức: Nothing, Low, Medium, High
+        cls.num_confident_levels = 4
         
         # Cập nhật tổng kích thước vector
         cls.state_size = cls._confident_start_idx + cls.num_confident_levels
@@ -833,6 +889,82 @@ class HostVector:
 
     @classmethod
     def get_readable(cls, vector):
+        """Chuyển đổi vector biểu diễn host thành từ điển có thể đọc được cho con người.
+        
+        Phương thức này chuyển đổi một vector số học biểu diễn trạng thái của host
+        thành một từ điển (dictionary) có cấu trúc rõ ràng với các khóa và giá trị
+        dễ hiểu. Đây là công cụ hữu ích để hiển thị thông tin host khi debug hoặc
+        để người dùng xem trạng thái hệ thống.
+        
+        Parameters
+        ----------
+        vector : numpy.ndarray
+            Vector số học biểu diễn trạng thái của host (1D numpy array)
+            
+        Returns
+        -------
+        dict
+            Từ điển chứa thông tin của host dưới dạng dễ đọc với các khóa:
+            - Address: tuple (subnet, host) biểu diễn địa chỉ
+            - Compromised: bool - host đã bị xâm nhập hay chưa
+            - Reachable: bool - host có thể tiếp cận được hay không
+            - Discovered: bool - host đã được phát hiện hay chưa
+            - Value: float - giá trị khi chiếm quyền root
+            - Discovery Value: float - giá trị khi phát hiện host
+            - Access: int - mức độ quyền truy cập hiện tại
+            - [Tên OS]: bool - trạng thái của từng hệ điều hành
+            - [Tên dịch vụ]: bool - trạng thái của từng dịch vụ
+            - [Tên tiến trình]: bool - trạng thái của từng tiến trình
+            - Monitoring: bool - trạng thái giám sát của host
+            - Decoy [Tên dịch vụ]: bool - trạng thái của từng dịch vụ giả mạo
+            - Confidence Level: str - mức độ tin cậy ("Nothing", "Low", "Medium", "High")
+            
+        Examples
+        --------
+        >>> # Ví dụ với một host đang chạy Linux, HTTP và Apache
+        >>> vector = np.zeros(20, dtype=np.float32)  # Giả sử vector có kích thước 20
+        >>> # Điền thông tin vào vector (giả định)
+        >>> vector[0] = 1.0  # Subnet 1
+        >>> vector[2] = 1.0  # Host 0
+        >>> vector[4] = 1.0  # Đã xâm nhập
+        >>> vector[5] = 1.0  # Có thể tiếp cận
+        >>> vector[6] = 1.0  # Đã phát hiện
+        >>> vector[7] = 10.0  # Giá trị
+        >>> vector[8] = 5.0   # Giá trị phát hiện
+        >>> vector[9] = 2.0   # Quyền truy cập ROOT
+        >>> vector[11] = 1.0  # Linux (index 1 trong os_idx_map)
+        >>> vector[13] = 1.0  # HTTP (index 0 trong service_idx_map)
+        >>> vector[16] = 1.0  # Apache (index 0 trong process_idx_map)
+        >>> # Điền thông tin bảo mật
+        >>> vector[18] = 1.0  # Đang được giám sát
+        >>> vector[21] = 1.0  # Dịch vụ giả mạo SSH (index 1)
+        >>> vector[24] = 1.0  # Mức độ tin cậy "Medium" (index 2)
+        >>>
+        >>> # Gọi hàm get_readable
+        >>> readable_info = HostVector.get_readable(vector)
+        >>> print(readable_info)
+        {
+            'Address': (1, 0),
+            'Compromised': True,
+            'Reachable': True,
+            'Discovered': True,
+            'Value': 10.0,
+            'Discovery Value': 5.0,
+            'Access': 2.0,
+            'Windows': False,
+            'Linux': True,
+            'HTTP': True,
+            'SSH': False,
+            'FTP': False,
+            'Apache': True,
+            'MySQL': False,
+            'Monitoring': True,
+            'Decoy HTTP': False,
+            'Decoy SSH': True,
+            'Decoy FTP': False,
+            'Confidence Level': 'Medium'
+        }
+        """
         readable_dict = dict()
         hvec = cls(vector)
         readable_dict["Address"] = hvec.address
@@ -848,7 +980,22 @@ class HostVector:
             readable_dict[f"{srv_name}"] = hvec.is_running_service(srv_name)
         for proc_name in cls.process_idx_map:
             readable_dict[f"{proc_name}"] = hvec.is_running_process(proc_name)
-
+        
+        # Thêm các thuộc tính bảo mật mới
+        readable_dict["Monitoring"] = bool(hvec.monitoring)
+        
+        # Thêm thông tin về dịch vụ giả mạo
+        for srv_name in cls.service_idx_map:
+            srv_num = cls.service_idx_map[srv_name]
+            is_decoy = bool(vector[cls._decoy_services_start_idx + srv_num])
+            readable_dict[f"Decoy {srv_name}"] = is_decoy
+        
+        confidence_levels = ["Nothing", "Low", "Medium", "High"]
+        for i, level in enumerate(confidence_levels):
+            is_active = bool(vector[cls._confident_start_idx + i])
+            if is_active:
+                readable_dict["Confidence Level"] = level
+                break
         return readable_dict
 
     @classmethod
