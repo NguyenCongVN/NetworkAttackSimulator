@@ -287,6 +287,70 @@ class HostVector:
             processes[proc] = self.vector[self._get_process_idx(proc_num)]
         return processes
 
+    @property
+    def monitoring(self):
+        """Trạng thái giám sát của host (1.0 = đang được giám sát, 0.0 = không giám sát)"""
+        return self.vector[self._monitoring_idx]
+
+    @monitoring.setter
+    def monitoring(self, val):
+        """Thiết lập trạng thái giám sát cho host"""
+        self.vector[self._monitoring_idx] = float(bool(val))
+
+    @property
+    def decoy_services(self):
+        """Lấy thông tin về các dịch vụ giả mạo đang chạy trên host dưới dạng từ điển"""
+        decoys = {}
+        # Sử dụng cùng tên dịch vụ như services thực, có thể điều chỉnh tùy nhu cầu
+        for srv, srv_num in self.service_idx_map.items():
+            decoys[srv] = bool(self.vector[self._decoy_services_start_idx + srv_num])
+        return decoys
+
+    def set_decoy_service(self, service_name, value=True):
+        """Thiết lập một dịch vụ giả mạo cụ thể trên host
+        
+        Parameters
+        ----------
+        service_name : str
+            Tên dịch vụ giả mạo cần thiết lập
+        value : bool, mặc định=True
+            True để bật dịch vụ giả mạo, False để tắt
+        """
+        if service_name in self.service_idx_map:
+            srv_num = self.service_idx_map[service_name]
+            self.vector[self._decoy_services_start_idx + srv_num] = float(bool(value))
+        else:
+            raise KeyError(f"Dịch vụ '{service_name}' không tồn tại trong service_idx_map")
+        
+    @property
+    def confident(self):
+        """Lấy mức độ tin cậy của host dưới dạng từ điển"""
+        # Các mức tin cậy: Low, Medium, High
+        confidence_levels = ["Low", "Medium", "High"]
+        confidence = {}
+        for i, level in enumerate(confidence_levels):
+            confidence[level] = bool(self.vector[self._confident_start_idx + i])
+        return confidence
+
+    def set_confident_level(self, level):
+        """Thiết lập mức độ tin cậy cho host
+        
+        Parameters
+        ----------
+        level : str
+            Mức độ tin cậy ("Low", "Medium", hoặc "High")
+        """
+        confidence_levels = ["Low", "Medium", "High"]
+        if level in confidence_levels:
+            # Reset tất cả các mức tin cậy về 0
+            for i in range(self.num_confident_levels):
+                self.vector[self._confident_start_idx + i] = 0.0
+            # Đặt mức tin cậy được chọn thành 1
+            level_idx = confidence_levels.index(level)
+            self.vector[self._confident_start_idx + level_idx] = 1.0
+        else:
+            raise ValueError(f"Mức độ tin cậy không hợp lệ. Phải là một trong: {confidence_levels}")
+
     def is_running_service(self, srv):
         """Kiểm tra xem dịch vụ cụ thể có đang chạy trên host hay không.
         
@@ -723,6 +787,17 @@ class HostVector:
         cls._service_start_idx = cls._os_start_idx + cls.num_os
         cls._process_start_idx = cls._service_start_idx + cls.num_services
         cls.state_size = cls._process_start_idx + cls.num_processes
+        
+        # Định nghĩa các chỉ số cụ thể
+        cls._monitoring_idx = cls._process_start_idx + cls.num_processes  # Chỉ số cho trạng thái giám sát (bool)
+        cls._decoy_services_start_idx = cls._monitoring_idx + 1  # Vị trí bắt đầu của decoy services (one-hot)
+        cls._confident_start_idx = cls._decoy_services_start_idx + cls.num_services  # Vị trí bắt đầu của confident (one-hot)
+        
+        # Giả sử confident có 3 mức: Low, Medium, High
+        cls.num_confident_levels = 3
+        
+        # Cập nhật tổng kích thước vector
+        cls.state_size = cls._confident_start_idx + cls.num_confident_levels
 
     @classmethod
     def _subnet_address_idx_slice(cls):
