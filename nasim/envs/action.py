@@ -566,6 +566,195 @@ class NoOp(Action):
                          req_access=AccessLevel.NONE)
 
 
+# Defense Action Definitions
+class IPBlock(Action):
+    """Hành động chặn địa chỉ IP trong môi trường
+    
+    Kế thừa từ lớp Action cơ sở.
+    Cho phép chặn hoàn toàn truy cập từ/đến một địa chỉ IP cụ thể.
+    """
+    
+    def __init__(
+        self,
+        target,
+        cost,
+        **kwargs
+    ):
+        """
+        Parameters
+        ---------
+        target : (int, int)
+            địa chỉ của mục tiêu cần chặn
+        cost : float
+            chi phí thực hiện hành động
+        duration : int, optional
+            số bước IP bị chặn (mặc định=5)
+        """
+        super().__init__(
+            name="ip_block",
+            target=target,
+            cost=cost,
+            **kwargs
+        )
+        
+        
+class DecoyServices(Action):
+    """Hành động tạo dịch vụ mồi nhử trong môi trường
+    
+    Kế thừa từ lớp Action cơ sở.
+    Tạo ra các dịch vụ giả để đánh lừa kẻ tấn công.
+    """
+    
+    def __init__(
+        self,
+        target,
+        cost,
+        service_type="http",  # Loại dịch vụ mồi nhử
+        **kwargs
+    ):
+        """
+        Parameters
+        ---------
+        target : (int, int)
+            địa chỉ của máy chủ để đặt dịch vụ mồi nhử
+        cost : float
+            chi phí thực hiện hành động
+        service_type : str, optional
+            loại dịch vụ mồi nhử (mặc định="http")
+        duration : int, optional
+            số bước dịch vụ mồi tồn tại (mặc định=10)
+        detection_prob : float, optional
+            xác suất phát hiện kẻ tấn công tương tác với mồi nhử (mặc định=0.7)
+        prob : float, optional
+            xác suất thành công của việc thiết lập mồi nhử (mặc định=1.0)
+        req_access : AccessLevel, optional
+            quyền truy cập cần thiết (mặc định=AccessLevel.USER)
+        """
+        super().__init__(
+            name="decoy_services",
+            target=target,
+            cost=cost,
+            **kwargs
+        )
+        self.service_type = service_type
+
+class DisableServices(Action):
+    """Hành động tắt dịch vụ trong môi trường
+    
+    Kế thừa từ lớp Action cơ sở.
+    Cho phép tắt các dịch vụ dễ bị tấn công để giảm bề mặt tấn công.
+    """
+    
+    def __init__(
+        self,
+        target,
+        cost,
+        service_name=None,  # Tên dịch vụ cần tắt
+        **kwargs
+    ):
+        """
+        Parameters
+        ---------
+        target : (int, int)
+            địa chỉ của máy chủ chứa dịch vụ cần tắt
+        cost : float
+            chi phí thực hiện hành động
+        service_name : str, optional
+            tên dịch vụ cụ thể cần tắt (mặc định=None)
+        duration : int, optional
+            số bước dịch vụ bị tắt (mặc định=5)
+        """
+        super().__init__(
+            name="disable_services",
+            target=target,
+            cost=cost,
+            **kwargs
+        )
+        self.service_name = service_name
+        
+class ToggleMonitoring(Action):
+    """Hành động bật/tắt giám sát trong môi trường
+    
+    Kế thừa từ lớp Action cơ sở.
+    Cho phép bật hoặc tắt hệ thống giám sát trên một máy chủ.
+    """
+    
+    def __init__(
+        self,
+        target,
+        cost,
+        enable=True,  # True để bật, False để tắt giám sát
+        **kwargs
+    ):
+        """
+        Parameters
+        ---------
+        target : (int, int)
+            địa chỉ của máy chủ để bật/tắt giám sát
+        cost : float
+            chi phí thực hiện hành động
+        enable : bool, optional
+            True để bật, False để tắt giám sát (mặc định=True)
+        monitor_level : int, optional
+            mức độ giám sát từ 1-3 (mặc định=1)
+        prob : float, optional
+            xác suất thành công (mặc định=1.0)
+        req_access : AccessLevel, optional
+            quyền truy cập cần thiết (mặc định=AccessLevel.USER)
+        """
+        action_name = "enable_monitoring" if enable else "disable_monitoring"
+        super().__init__(
+            name=action_name,
+            target=target,
+            cost=cost,
+            **kwargs
+        )
+        self.enable = enable
+        
+
+class Alert(Action):
+    """Hành động gửi cảnh báo trong môi trường
+    
+    Kế thừa từ lớp Action cơ sở.
+    Gửi cảnh báo về hoạt động đáng ngờ, có thể làm giảm 
+    thời gian phản ứng và giảm thiểu thiệt hại.
+    """
+    
+    def __init__(
+        self,
+        target,
+        cost,
+        severity=2,  # Mức độ nghiêm trọng (1-3)
+        req_access=AccessLevel.USER,
+        **kwargs
+    ):
+        """
+        Parameters
+        ---------
+        target : (int, int)
+            địa chỉ liên quan đến cảnh báo (nguồn hoặc đích)
+        cost : float
+            chi phí thực hiện hành động
+        alert_type : str, optional
+            loại cảnh báo (mặc định="suspicious_activity")
+        severity : int, optional
+            mức độ nghiêm trọng từ 1-3 (mặc định=2)
+        notify_admin : bool, optional
+            có gửi thông báo đến admin không (mặc định=True)
+        prob : float, optional
+            xác suất thành công (mặc định=1.0)
+        req_access : AccessLevel, optional
+            quyền truy cập cần thiết (mặc định=AccessLevel.USER)
+        """
+        super().__init__(
+            name="alert",
+            target=target,
+            cost=cost,
+            req_access=req_access,
+            **kwargs
+        )
+        self.severity = min(max(1, severity), 3)  # Giới hạn giá trị từ 1-3
+
 class ActionResult:
     """A dataclass for storing the results of an Action.
 
